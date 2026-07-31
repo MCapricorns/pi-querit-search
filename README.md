@@ -49,15 +49,15 @@ When no configuration exists yet, the command:
 1. opens a masked API-key prompt;
 2. makes one one-result search request to validate the key;
 3. walks through persistent search defaults (result count, time range, content excerpts, countries, languages, and optional include/exclude domain lists — exclude ships with a built-in noise-blocker preset) — each step can be skipped;
-4. lets you choose `raw` or `summary` as the default workflow;
-5. lists Pi's current scoped/available models, with the active model first, and saves one fixed summary model;
+4. lets you choose `raw` or `summary` as the default workflow — choosing `raw` skips the model selection step;
+5. (summary only) opens an interactive model picker — five models per page with arrow-key navigation and type-to-filter fuzzy matching, active model first — saves one fixed summary model, then asks for a thinking intensity for that model (the list is filtered to the levels the model supports, defaulting to `medium`);
 6. stores the configuration in Pi's agent directory as `querit-search.json`.
 
 When a key is already configured, the command opens a menu instead:
 
 - **Replace API key (full re-setup)** — prompts for a new key, validates it, and re-runs the full flow. The old key is overwritten locally; revoke it in the Querit dashboard if needed.
 - **Change search defaults** — edits the persistent search filters without touching the saved key.
-- **Change summary settings** — edits the default workflow and the fixed summary model.
+- **Change summary settings** — edits the default workflow, the fixed summary model, and its thinking intensity.
 
 The default path is `~/.pi/agent/querit-search.json`. Pi's configured agent directory is respected, including `PI_CODING_AGENT_DIR`. The file contains:
 
@@ -66,6 +66,7 @@ The default path is `~/.pi/agent/querit-search.json`. Pi's configured agent dire
   "apiKey": "your-api-key",
   "defaultWorkflow": "raw",
   "summaryModel": "provider/model-id",
+  "summaryThinkingLevel": "medium",
   "search": {
     "count": 5,
     "timeRange": "m3",
@@ -99,7 +100,7 @@ Domains, time range, countries, languages, and content excerpts are persistent d
 
 Results include explicit title, URL, snippet, source metadata, and optional sentence excerpts. Duplicate and non-HTTP(S) result URLs are removed.
 
-`raw` is the recommended default: Pi's outer model receives the cited Querit results and answers normally. `summary` performs one additional nested LLM call using the fixed model selected in `/querit-setup`, then returns a concise summary plus a deterministic Sources list. The nested call's usage is reported on the tool result and contributes to Pi's session token and cost totals (it is not part of main-context window accounting). If the fixed model is missing, unauthenticated, times out after 30 seconds, or returns empty output, `web_search` falls back to raw results and reports the reason. User cancellation still cancels the tool.
+`raw` is the recommended default: Pi's outer model receives the cited Querit results and answers normally. `summary` performs one additional nested LLM call using the fixed model selected in `/querit-setup`, then returns a concise summary — instructed to preserve concrete technical details such as version numbers, API signatures, error messages, and verbatim quotes — followed by a deterministic Sources list and a `## Key excerpts` section carrying the top five results' raw snippets, so the outer model can drill into any listed source via `fetch_content` when it needs more detail. The nested call's usage is reported on the tool result and contributes to Pi's session token and cost totals (it is not part of main-context window accounting). If the fixed model is missing, unauthenticated, times out after 30 seconds, or returns empty output, `web_search` falls back to raw results and reports the reason. User cancellation still cancels the tool.
 
 ### `fetch_content`
 

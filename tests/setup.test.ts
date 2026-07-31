@@ -44,25 +44,79 @@ describe("masked setup prompt", () => {
   it("selects a fixed summary model from Pi models with the active model first", async () => {
     const currentModel = { provider: "openai", id: "current" };
     const scopedModel = { provider: "anthropic", id: "scoped" };
-    const select = vi.fn()
-      .mockResolvedValueOnce("Auto-summary before returning results")
-      .mockResolvedValueOnce("openai/current");
+    const select = vi.fn().mockResolvedValueOnce("Auto-summary before returning results");
+    let rendered = "";
+    const custom = vi.fn(async (factory: any) => {
+      return new Promise<string | undefined>((resolve) => {
+        const component = factory(
+          { requestRender: vi.fn() },
+          {
+            fg: (_color: string, text: string) => text,
+            bold: (text: string) => text,
+          },
+          {},
+          resolve,
+        );
+        component.focused = true;
+        rendered = component.render(120).join("\n");
+        component.handleInput("\n");
+      });
+    });
     const ctx = {
       mode: "tui",
       model: currentModel,
       scopedModels: [{ model: scopedModel }],
-      modelRegistry: { getAvailable: vi.fn(() => []) },
-      ui: { select, notify: vi.fn() },
+      modelRegistry: { getAvailable: vi.fn(() => []), find: vi.fn(() => undefined) },
+      ui: { select, custom, notify: vi.fn() },
     };
 
     await expect(promptForSummarySettings(ctx as any)).resolves.toEqual({
       defaultWorkflow: "summary",
       summaryModel: "openai/current",
     });
-    expect(select).toHaveBeenNthCalledWith(2, "Fixed model for optional Querit summaries", [
-      "openai/current",
-      "anthropic/scoped",
-    ]);
+    expect(rendered.indexOf("openai/current")).toBeGreaterThanOrEqual(0);
+    expect(rendered.indexOf("openai/current")).toBeLessThan(rendered.indexOf("anthropic/scoped"));
+  });
+
+  it("prompts for a per-model thinking intensity after picking the summary model", async () => {
+    const thinkingModel = {
+      provider: "qwen",
+      id: "thinking-model",
+      reasoning: true,
+      thinkingLevelMap: { low: "low", medium: "medium", xhigh: "xhigh" },
+    };
+    const select = vi.fn()
+      .mockResolvedValueOnce("Auto-summary before returning results")
+      .mockResolvedValueOnce("medium (recommended)");
+    const custom = vi.fn(async (factory: any) => {
+      return new Promise<string | undefined>((resolve) => {
+        const component = factory(
+          { requestRender: vi.fn() },
+          {
+            fg: (_color: string, text: string) => text,
+            bold: (text: string) => text,
+          },
+          {},
+          resolve,
+        );
+        component.focused = true;
+        component.handleInput("\n");
+      });
+    });
+    const ctx = {
+      mode: "tui",
+      model: thinkingModel,
+      scopedModels: [],
+      modelRegistry: { getAvailable: vi.fn(() => []), find: vi.fn(() => thinkingModel) },
+      ui: { select, custom, notify: vi.fn() },
+    };
+
+    await expect(promptForSummarySettings(ctx as any)).resolves.toEqual({
+      defaultWorkflow: "summary",
+      summaryModel: "qwen/thinking-model",
+      summaryThinkingLevel: "medium",
+    });
+    expect(select.mock.calls[1]![0]).toContain("Thinking intensity");
   });
 
   it("refuses non-interactive setup", async () => {

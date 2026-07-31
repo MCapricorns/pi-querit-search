@@ -50,15 +50,15 @@ pi -e .
 1. 打开遮罩 API Key 输入框（不记录到聊天历史）；
 2. 发起一次单结果搜索请求验证 Key 有效性；
 3. 逐项询问持久化搜索默认值（结果数量、时间范围、内容摘录、国家、语言、域名包含/排除名单，排除项内置噪音名单预设），每一项都可跳过；
-4. 让你选择默认工作流：`raw`（原始结果）或 `summary`（自动摘要）；
-5. 列出 Pi 当前 scoped/available 模型（活动模型排第一），选择一个固定 Summary 模型；
+4. 让你选择默认工作流：`raw`（原始结果）或 `summary`（自动摘要）——选择 `raw` 时跳过模型选择步骤；
+5. （仅 `summary`）打开交互式模型选择器——每页 5 个、方向键翻页、输入即模糊过滤，活动模型排第一——选定固定 Summary 模型后，再为该模型选择思考强度（仅列出该模型支持的档位，默认 `medium`）；
 6. 将配置保存到 Pi agent 目录下的 `querit-search.json`。
 
 已有 Key 时，该命令改为打开二级菜单：
 
 - **Replace API key (full re-setup)** —— 输入并验证新 Key，重走完整流程。旧 Key 仅在本地被覆盖，如需吊销请到 Querit 控制台操作。
 - **Change search defaults** —— 只修改持久化搜索过滤项，不动已保存的 Key。
-- **Change summary settings** —— 修改默认工作流和固定 Summary 模型。
+- **Change summary settings** —— 修改默认工作流、固定 Summary 模型及其思考强度。
 
 默认路径为 `~/.pi/agent/querit-search.json`，尊重 `PI_CODING_AGENT_DIR` 环境变量。文件内容：
 
@@ -67,6 +67,7 @@ pi -e .
   "apiKey": "your-api-key",
   "defaultWorkflow": "raw",
   "summaryModel": "provider/model-id",
+  "summaryThinkingLevel": "medium",
   "search": {
     "count": 5,
     "timeRange": "m3",
@@ -99,7 +100,7 @@ CI 或临时使用可设置环境变量 `QUERIT_API_KEY`，JSON 配置优先。
 域名、时间范围、国家、语言、内容摘录是持久化默认值，在 `/querit-setup` 中配置（保存于 `querit-search.json` 的 `search` 字段），不再是单次调用参数。两个域名名单都跳过即完全放开；include 是白名单（只返回这些域名的结果），exclude 是黑名单。
 结果包含标题、URL、摘要、来源元数据和可选的句子级内容摘录。重复和非 HTTP(S) 的结果 URL 会被过滤。
 
-`raw` 是推荐默认值：Pi 外层模型直接接收带引用的 Querit 结果并正常回答。`summary` 会额外调用一次 `/querit-setup` 中选定的固定 Pi 模型，先压缩为简洁摘要再附加确定性 Sources 列表。嵌套调用的 usage 会报告在工具结果上，计入 Pi 会话 token/cost 统计（不影响主上下文窗口核算）。若固定模型缺失、无认证、30 秒超时或返回空内容，`web_search` 自动回退到原始结果并注明原因。用户取消仍会取消整个工具调用。
+`raw` 是推荐默认值：Pi 外层模型直接接收带引用的 Querit 结果并正常回答。`summary` 会额外调用一次 `/querit-setup` 中选定的固定 Pi 模型，先压缩为简洁摘要（要求保留版本号、API 签名、报错信息、原文引用等具体技术细节），再附加确定性 Sources 列表和 `## Key excerpts` 段落（携带前 5 条结果的原始 snippet），便于外层模型在信息不足时通过 `fetch_content` 深挖任意来源。嵌套调用的 usage 会报告在工具结果上，计入 Pi 会话 token/cost 统计（不影响主上下文窗口核算）。若固定模型缺失、无认证、30 秒超时或返回空内容，`web_search` 自动回退到原始结果并注明原因。用户取消仍会取消整个工具调用。
 
 ### `fetch_content`
 

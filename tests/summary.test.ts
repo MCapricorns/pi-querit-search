@@ -86,6 +86,27 @@ describe("Querit auto-summary", () => {
     expect(formatted).not.toContain("\u001b");
   });
 
+  it("appends raw key excerpts after the sources for hybrid detail", () => {
+    const search = {
+      query: "q",
+      searchId: "9",
+      results: [
+        { title: "First", url: "https://a.example", snippet: "alpha snippet", sentences: ["alpha sentence"] },
+        { title: "Second", url: "https://b.example", snippet: "", sentences: [] },
+        { title: "Third", url: "https://c.example", snippet: "gamma snippet", sentences: [] },
+      ],
+    };
+    const formatted = formatSummaryOutput(search as any, "A summary.", "anthropic/summary-model");
+    expect(formatted).toContain("## Sources");
+    expect(formatted).toContain("## Key excerpts");
+    expect(formatted).toContain("[1] First");
+    expect(formatted).toContain("alpha snippet");
+    expect(formatted).toContain("- alpha sentence");
+    expect(formatted).toContain("[3] Third");
+    expect(formatted).not.toContain("[2] Second");
+    expect(formatted.indexOf("## Key excerpts")).toBeGreaterThan(formatted.indexOf("## Sources"));
+  });
+
   it("returns a raw-fallback reason when the fixed model is unavailable", async () => {
     const context = {
       modelRegistry: {
@@ -162,5 +183,69 @@ describe("Querit auto-summary", () => {
     controller.abort();
 
     await expect(operation).rejects.toThrow("cancelled");
+  });
+
+  function reasoningContext() {
+    const model = { provider: "qwen", id: "thinking-model", api: "openai-completions", reasoning: true };
+    return {
+      model,
+      context: {
+        modelRegistry: {
+          find: vi.fn(() => model),
+          getApiKeyAndHeaders: vi.fn(async () => ({
+            ok: true,
+            apiKey: "model-test-key",
+            headers: {},
+            env: {},
+          })),
+        },
+      },
+    };
+  }
+
+  function assistantStub() {
+    return {
+      role: "assistant",
+      content: [{ type: "text", text: "summary" }],
+      stopReason: "stop",
+      usage,
+      timestamp: Date.now(),
+    };
+  }
+
+  it("passes the configured thinking level as reasoning for a reasoning model", async () => {
+    const { context } = reasoningContext();
+    const completeFn = vi.fn(async (_model: any, _request: any, _options: any) => assistantStub());
+
+    await generateSearchSummary(searchResponse, context as any, "qwen/thinking-model", undefined, completeFn as any, 1_000, "low");
+
+    expect(completeFn.mock.calls[0]![2].reasoning).toBe("low");
+  });
+
+  it("quietly defaults reasoning to medium for reasoning models without a configured level", async () => {
+    const { context } = reasoningContext();
+    const completeFn = vi.fn(async (_model: any, _request: any, _options: any) => assistantStub());
+
+    await generateSearchSummary(searchResponse, context as any, "qwen/thinking-model", undefined, completeFn as any, 1_000);
+
+    expect(completeFn.mock.calls[0]![2].reasoning).toBe("medium");
+  });
+
+  it("omits reasoning for non-reasoning models and respects an explicit off", async () => {
+    const { context } = reasoningContext();
+    const completeFn = vi.fn(async (_model: any, _request: any, _options: any) => assistantStub());
+
+    await generateSearchSummary(searchResponse, context as any, "qwen/thinking-model", undefined, completeFn as any, 1_000, "off");
+    expect(completeFn.mock.calls[0]![2].reasoning).toBeUndefined();
+
+    const nonReasoning = { provider: "openai", id: "plain", api: "openai-completions", reasoning: false };
+    const nonReasoningContext = {
+      modelRegistry: {
+        find: vi.fn(() => nonReasoning),
+        getApiKeyAndHeaders: vi.fn(async () => ({ ok: true, apiKey: "k", headers: {}, env: {} })),
+      },
+    };
+    await generateSearchSummary(searchResponse, nonReasoningContext as any, "openai/plain", undefined, completeFn as any, 1_000, "low");
+    expect(completeFn.mock.calls[1]![2].reasoning).toBeUndefined();
   });
 });

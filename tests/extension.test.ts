@@ -144,6 +144,9 @@ describe("Pi extension", () => {
       context,
       "anthropic/summary-model",
       undefined,
+      undefined,
+      undefined,
+      undefined,
     );
     expect(summarized.content[0].text).toContain("Querit auto-summary");
     expect(summarized.content[0].text).toContain("https://example.com/");
@@ -227,10 +230,9 @@ describe("Pi extension", () => {
     expect(JSON.parse(await readFile(harness.configPath, "utf8"))).toEqual({
       apiKey: "new-test-key",
       defaultWorkflow: "raw",
-      summaryModel: "anthropic/summary-model",
     });
     const modelPrompt = select.mock.calls.find(([message]) => String(message).includes("Fixed model"));
-    expect(modelPrompt?.[1]).toEqual(["anthropic/summary-model"]);
+    expect(modelPrompt).toBeUndefined();
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("configured successfully"), "info");
     expect(setStatus).toHaveBeenLastCalledWith("querit-setup", undefined);
   });
@@ -281,8 +283,19 @@ describe("Pi extension", () => {
     const currentModel = { provider: "anthropic", id: "summary-model" };
     const select = vi.fn()
       .mockResolvedValueOnce("Change summary settings")
-      .mockResolvedValueOnce("Auto-summary before returning results")
-      .mockResolvedValueOnce("anthropic/summary-model");
+      .mockResolvedValueOnce("Auto-summary before returning results");
+    const custom = vi.fn(async (factory: any) => {
+      return new Promise<string | undefined>((resolve) => {
+        const component = factory(
+          { requestRender: vi.fn() },
+          { fg: (_color: string, text: string) => text, bold: (text: string) => text },
+          {},
+          resolve,
+        );
+        component.focused = true;
+        component.handleInput("\n");
+      });
+    });
     const ctx = {
       mode: "tui",
       model: currentModel,
@@ -292,7 +305,7 @@ describe("Pi extension", () => {
         find: vi.fn(() => currentModel),
         getApiKeyAndHeaders: vi.fn(async () => ({ ok: true, apiKey: "model-key" })),
       },
-      ui: { select, custom: vi.fn(), notify, setStatus: vi.fn() },
+      ui: { select, custom, notify, setStatus: vi.fn() },
     };
 
     await command.handler("", ctx);

@@ -160,7 +160,7 @@ export function registerQueritExtension(pi: ExtensionAPI, options: QueritExtensi
             : "Checking Querit summary configuration..." }],
           details: { kind: "search", phase: "summarizing", query, workflow } satisfies ToolDetails,
         });
-        const summaryResult = await summarize(response, ctx, config?.summaryModel, signal);
+        const summaryResult = await summarize(response, ctx, config?.summaryModel, signal, undefined, undefined, config?.summaryThinkingLevel);
         summaryModel = summaryResult.model ?? config?.summaryModel;
         summaryFallbackReason = summaryResult.fallbackReason;
         summaryUsage = summaryResult.usage;
@@ -203,7 +203,7 @@ export function registerQueritExtension(pi: ExtensionAPI, options: QueritExtensi
         0,
       );
     },
-    renderResult(result, { expanded, isPartial }, theme) {
+    renderResult(result, { isPartial }, theme) {
       const details = result.details as ToolDetails | undefined;
       if (isPartial || details?.phase === "running" || details?.phase === "summarizing") {
         const message = details?.phase === "summarizing" ? "Summarizing Querit results..." : "Searching Querit...";
@@ -214,7 +214,6 @@ export function registerQueritExtension(pi: ExtensionAPI, options: QueritExtensi
         ? details.summaryFallbackReason ? " · raw fallback" : " · summarized"
         : "";
       const summary = `${details?.resultCount ?? 0} result(s)${workflowLabel}${details?.truncated ? " (truncated)" : ""}`;
-      if (!expanded) return new Text(theme.fg("success", summary), 0, 0);
       return new Text(`${theme.fg("success", summary)}\n${toolResultText(result.content)}`, 0, 0);
     },
   });
@@ -274,14 +273,13 @@ export function registerQueritExtension(pi: ExtensionAPI, options: QueritExtensi
         0,
       );
     },
-    renderResult(result, { expanded, isPartial }, theme) {
+    renderResult(result, { isPartial }, theme) {
       const details = result.details as ToolDetails | undefined;
       if (isPartial || details?.phase === "running") {
         return new Text(theme.fg("warning", "Fetching through Querit..."), 0, 0);
       }
 
       const summary = `${details?.resultCount ?? 0} page(s)${details?.truncated ? " (truncated)" : ""}`;
-      if (!expanded) return new Text(theme.fg("success", summary), 0, 0);
       return new Text(`${theme.fg("success", summary)}\n${toolResultText(result.content)}`, 0, 0);
     },
   });
@@ -316,6 +314,7 @@ export function registerQueritExtension(pi: ExtensionAPI, options: QueritExtensi
             await saveQueritConfig(existing.apiKey, configPath, {
               defaultWorkflow: existing.defaultWorkflow,
               summaryModel: existing.summaryModel,
+              summaryThinkingLevel: existing.summaryThinkingLevel,
               search,
             });
             ctx.ui.notify(`Querit search defaults updated. Configuration saved to ${configPath}`, "info");

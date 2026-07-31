@@ -111,12 +111,12 @@ describe("search defaults prompts", () => {
       .mockResolvedValueOnce("10")
       .mockResolvedValueOnce("Skip (use API default)")
       .mockResolvedValueOnce("Yes, include excerpts")
-      .mockResolvedValueOnce("Skip (use API default)");
+      .mockResolvedValueOnce("Enter a custom list…")
+      .mockResolvedValueOnce("Reset (no domain filter)");
     const custom = vi.fn()
       .mockResolvedValueOnce("United States")
       .mockResolvedValueOnce("")
-      .mockResolvedValueOnce("github.com, Wikipedia.org")
-      .mockResolvedValueOnce("none");
+      .mockResolvedValueOnce("github.com, Wikipedia.org");
 
     const result = await promptForSearchDefaults(
       defaultsContext(select, custom) as any,
@@ -130,12 +130,27 @@ describe("search defaults prompts", () => {
     });
   });
 
+  it("applies the noise blocker preset to the exclude list", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce("Skip (use API default)")
+      .mockResolvedValueOnce("Skip (use API default)")
+      .mockResolvedValueOnce("Skip (use API default)")
+      .mockResolvedValueOnce("Skip (no domain filter)")
+      .mockResolvedValueOnce("Noise blockers (pinterest.com, facebook.com, instagram.com, tiktok.com)");
+    const custom = vi.fn().mockResolvedValue("");
+
+    const result = await promptForSearchDefaults(defaultsContext(select, custom) as any);
+    expect(result).toEqual({
+      excludeDomains: ["pinterest.com", "facebook.com", "instagram.com", "tiktok.com"],
+    });
+  });
   it("keeps or resets current values when editing existing defaults", async () => {
     const select = vi.fn()
       .mockResolvedValueOnce("Keep current (7)")
       .mockResolvedValueOnce("Reset to API default")
       .mockResolvedValueOnce("Keep current (no)")
-      .mockResolvedValueOnce("Keep current (2)");
+      .mockResolvedValueOnce("Skip (no domain filter)")
+      .mockResolvedValueOnce("Skip (no domain filter)");
     const custom = vi.fn().mockResolvedValue("");
 
     const result = await promptForSearchDefaults(defaultsContext(select, custom) as any, {
@@ -160,13 +175,17 @@ describe("search defaults prompts", () => {
   });
 
   it("re-prompts when list values are invalid", async () => {
-    const select = vi.fn().mockImplementation(async (_message: string, options: string[]) => options[0]);
+    const select = vi.fn()
+      .mockResolvedValueOnce("Skip (use API default)")
+      .mockResolvedValueOnce("Skip (use API default)")
+      .mockResolvedValueOnce("Skip (use API default)")
+      .mockResolvedValueOnce("Enter a custom list…")
+      .mockResolvedValueOnce("Skip (no domain filter)");
     const custom = vi.fn()
       .mockResolvedValueOnce("atlantis")
       .mockResolvedValueOnce("japan")
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("not a domain")
-      .mockResolvedValueOnce("")
       .mockResolvedValueOnce("");
     const notify = vi.fn();
 

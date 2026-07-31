@@ -48,7 +48,7 @@ When no configuration exists yet, the command:
 
 1. opens a masked API-key prompt;
 2. makes one one-result search request to validate the key;
-3. walks through persistent search defaults (result count, time range, content excerpts, chunks per result, countries, languages, included/excluded domains) — each step can be skipped;
+3. walks through persistent search defaults (result count, time range, content excerpts, countries, languages, and optional include/exclude domain lists — exclude ships with a built-in noise-blocker preset) — each step can be skipped;
 4. lets you choose `raw` or `summary` as the default workflow;
 5. lists Pi's current scoped/available models, with the active model first, and saves one fixed summary model;
 6. stores the configuration in Pi's agent directory as `querit-search.json`.
@@ -70,7 +70,6 @@ The default path is `~/.pi/agent/querit-search.json`. Pi's configured agent dire
     "count": 5,
     "timeRange": "m3",
     "includeContent": false,
-    "chunksPerDoc": 1,
     "countries": ["united states"],
     "languages": ["english"],
     "includeDomains": ["github.com"],
@@ -96,7 +95,7 @@ Optional:
 - `count` (`1..20`) — overrides the configured default for one call (API default: `5`)
 - `workflow`: `raw` or `summary`; overrides the setup default for one call
 
-Domains, time range, countries, languages, content excerpts, and chunks per result are persistent defaults configured in `/querit-setup` (stored under `search` in `querit-search.json`), not per-call parameters.
+Domains, time range, countries, languages, and content excerpts are persistent defaults configured in `/querit-setup` (stored under `search` in `querit-search.json`), not per-call parameters. Skipping the domain lists leaves search unrestricted; the include list is a whitelist (only those domains return results), the exclude list is a blacklist.
 
 Results include explicit title, URL, snippet, source metadata, and optional sentence excerpts. Duplicate and non-HTTP(S) result URLs are removed.
 

@@ -156,21 +156,6 @@ export async function promptForSearchDefaults(
   if (isResetChoice(contentChoice)) delete next.includeContent;
   else if (!isKeepChoice(contentChoice)) next.includeContent = contentChoice.startsWith("Yes");
 
-  const chunksChoice = await ctx.ui.select(
-    "Default content chunks per result",
-    scalarOptions(current.chunksPerDoc === undefined ? undefined : String(current.chunksPerDoc), [
-      "1 (Free/PAYG limit)",
-      "2 (Enterprise)",
-      "3 (Enterprise)",
-    ]),
-  );
-  if (chunksChoice === undefined) return undefined;
-  if (isResetChoice(chunksChoice)) delete next.chunksPerDoc;
-  else if (!isKeepChoice(chunksChoice)) {
-    const parsed = Number.parseInt(chunksChoice, 10);
-    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 3) next.chunksPerDoc = parsed;
-  }
-
   const countries = await promptForEnumList(ctx, {
     title: `Default countries filter${formatCurrentList(current.countries)}`,
     hint: `Comma-separated country names. Valid values: ${COUNTRY_VALUES.join(", ")}.`,
@@ -189,17 +174,21 @@ export async function promptForSearchDefaults(
   if (languages.cleared) delete next.languages;
   else if (languages.values !== undefined) next.languages = languages.values as QueritLanguage[];
 
-  const includeDomains = await promptForDomainList(ctx, {
-    title: `Default domains to include${formatCurrentList(current.includeDomains)}`,
-    hint: "Comma-separated domains, e.g. github.com, wikipedia.org.",
+  const includeDomains = await promptForDomainChoice(ctx, {
+    message: "Restrict results to specific domains? (include whitelist)",
+    current: current.includeDomains,
+    customTitle: "Include only these domains (whitelist)",
+    customHint: "Only these domains will return results. Example: github.com, stackoverflow.com, developer.mozilla.org. Comma-separated; 'none' clears.",
   });
   if (includeDomains === undefined) return undefined;
   if (includeDomains.cleared) delete next.includeDomains;
   else if (includeDomains.values !== undefined) next.includeDomains = includeDomains.values;
-
-  const excludeDomains = await promptForDomainList(ctx, {
-    title: `Default domains to exclude${formatCurrentList(current.excludeDomains)}`,
-    hint: "Comma-separated domains, e.g. pinterest.com.",
+  const excludeDomains = await promptForDomainChoice(ctx, {
+    message: "Exclude specific domains from results? (blacklist)",
+    current: current.excludeDomains,
+    preset: EXCLUDE_DOMAIN_PRESET,
+    customTitle: "Exclude these domains (blacklist)",
+    customHint: "These domains will never return results. Comma-separated; 'none' clears.",
   });
   if (excludeDomains === undefined) return undefined;
   if (excludeDomains.cleared) delete next.excludeDomains;
@@ -207,6 +196,11 @@ export async function promptForSearchDefaults(
 
   return next;
 }
+
+const EXCLUDE_DOMAIN_PRESET = {
+  label: "Noise blockers (pinterest.com, facebook.com, instagram.com, tiktok.com)",
+  values: ["pinterest.com", "facebook.com", "instagram.com", "tiktok.com"],
+};
 
 interface ListPromptResult {
   cleared: boolean;
@@ -253,6 +247,36 @@ async function promptForDomainList(
   }
 }
 
+async function promptForDomainChoice(
+  ctx: ExtensionCommandContext,
+  options: {
+    message: string;
+    current: string[] | undefined;
+    preset?: { label: string; values: string[] };
+    customTitle: string;
+    customHint: string;
+  },
+): Promise<ListPromptResult | undefined> {
+  const hasCurrent = options.current !== undefined && options.current.length > 0;
+  const selectOptions: string[] = [];
+  if (hasCurrent) {
+    selectOptions.push(`Keep current (${options.current?.join(", ")})`);
+    selectOptions.push("Reset (no domain filter)");
+  } else {
+    selectOptions.push("Skip (no domain filter)");
+  }
+  if (options.preset) selectOptions.push(options.preset.label);
+  selectOptions.push("Enter a custom list…");
+
+  const choice = await ctx.ui.select(options.message, selectOptions);
+  if (choice === undefined) return undefined;
+  if (isKeepChoice(choice)) return { cleared: false };
+  if (isResetChoice(choice)) return { cleared: true };
+  if (options.preset && choice === options.preset.label) {
+    return { cleared: false, values: [...options.preset.values] };
+  }
+  return promptForDomainList(ctx, { title: options.customTitle, hint: options.customHint });
+}
 async function promptForPlainText(
   ctx: ExtensionCommandContext,
   title: string,

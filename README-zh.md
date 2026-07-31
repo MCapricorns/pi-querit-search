@@ -49,7 +49,7 @@ pi -e .
 
 1. 打开遮罩 API Key 输入框（不记录到聊天历史）；
 2. 发起一次单结果搜索请求验证 Key 有效性；
-3. 逐项询问持久化搜索默认值（结果数量、时间范围、内容摘录、每结果 chunk 数、国家、语言、包含/排除域名），每一项都可跳过；
+3. 逐项询问持久化搜索默认值（结果数量、时间范围、内容摘录、国家、语言、域名包含/排除名单，排除项内置噪音名单预设），每一项都可跳过；
 4. 让你选择默认工作流：`raw`（原始结果）或 `summary`（自动摘要）；
 5. 列出 Pi 当前 scoped/available 模型（活动模型排第一），选择一个固定 Summary 模型；
 6. 将配置保存到 Pi agent 目录下的 `querit-search.json`。
@@ -71,7 +71,6 @@ pi -e .
     "count": 5,
     "timeRange": "m3",
     "includeContent": false,
-    "chunksPerDoc": 1,
     "countries": ["united states"],
     "languages": ["english"],
     "includeDomains": ["github.com"],
@@ -97,7 +96,7 @@ CI 或临时使用可设置环境变量 `QUERIT_API_KEY`，JSON 配置优先。
 - `count`（`1..20`）—— 单次覆盖已配置的默认值（API 默认 `5`）
 - `workflow`：`raw` 或 `summary`，单次覆盖默认值
 
-域名、时间范围、国家、语言、内容摘录和每结果 chunk 数是持久化默认值，在 `/querit-setup` 中配置（保存于 `querit-search.json` 的 `search` 字段），不再是单次调用参数。
+域名、时间范围、国家、语言、内容摘录是持久化默认值，在 `/querit-setup` 中配置（保存于 `querit-search.json` 的 `search` 字段），不再是单次调用参数。两个域名名单都跳过即完全放开；include 是白名单（只返回这些域名的结果），exclude 是黑名单。
 结果包含标题、URL、摘要、来源元数据和可选的句子级内容摘录。重复和非 HTTP(S) 的结果 URL 会被过滤。
 
 `raw` 是推荐默认值：Pi 外层模型直接接收带引用的 Querit 结果并正常回答。`summary` 会额外调用一次 `/querit-setup` 中选定的固定 Pi 模型，先压缩为简洁摘要再附加确定性 Sources 列表。嵌套调用的 usage 会报告在工具结果上，计入 Pi 会话 token/cost 统计（不影响主上下文窗口核算）。若固定模型缺失、无认证、30 秒超时或返回空内容，`web_search` 自动回退到原始结果并注明原因。用户取消仍会取消整个工具调用。

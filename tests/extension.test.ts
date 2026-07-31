@@ -246,12 +246,12 @@ describe("Pi extension", () => {
       .mockResolvedValueOnce("10")
       .mockResolvedValueOnce("d7 (past 7 days)")
       .mockResolvedValueOnce("Skip (use API default)")
-      .mockResolvedValueOnce("Skip (use API default)");
+      .mockResolvedValueOnce("Enter a custom list…")
+      .mockResolvedValueOnce("Skip (no domain filter)");
     const custom = vi.fn()
       .mockResolvedValueOnce("United States, Japan")
       .mockResolvedValueOnce("")
-      .mockResolvedValueOnce("github.com")
-      .mockResolvedValueOnce("none");
+      .mockResolvedValueOnce("github.com");
     const ctx = { mode: "tui", ui: { select, custom, notify, setStatus: vi.fn() } };
 
     await command.handler("", ctx);

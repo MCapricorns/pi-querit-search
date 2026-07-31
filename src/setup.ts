@@ -25,6 +25,11 @@ import {
   type SearchWorkflow,
 } from "./config.js";
 
+/**
+ * Masks the API key during rendering by temporarily swapping the Input value
+ * with asterisks. Safe because pi-tui's Input.setValue is a pure field
+ * assignment (no callbacks) and Input.render is a pure computation.
+ */
 class MaskedInput extends Input {
   override render(width: number): string[] {
     const secret = this.getValue();

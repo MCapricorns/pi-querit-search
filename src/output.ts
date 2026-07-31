@@ -39,8 +39,13 @@ export async function limitToolOutput(text: string, fileName: string): Promise<L
   while (Buffer.byteLength(resultText, "utf8") > DEFAULT_MAX_BYTES || lineCount(resultText) > DEFAULT_MAX_LINES) {
     const byteOverflow = Math.max(0, Buffer.byteLength(resultText, "utf8") - DEFAULT_MAX_BYTES);
     const lineOverflow = Math.max(0, lineCount(resultText) - DEFAULT_MAX_LINES);
-    bodyByteLimit = Math.max(1, bodyByteLimit - byteOverflow);
-    bodyLineLimit = Math.max(1, bodyLineLimit - lineOverflow);
+    const nextByteLimit = Math.max(1, bodyByteLimit - byteOverflow);
+    const nextLineLimit = Math.max(1, bodyLineLimit - lineOverflow);
+    // Safety valve: if limits cannot shrink further the suffix alone exceeds the
+    // cap — stop iterating instead of looping forever.
+    if (nextByteLimit === bodyByteLimit && nextLineLimit === bodyLineLimit) break;
+    bodyByteLimit = nextByteLimit;
+    bodyLineLimit = nextLineLimit;
     truncation = truncateHead(text, { maxBytes: bodyByteLimit, maxLines: bodyLineLimit });
     resultText = `${truncation.content}${suffix}`;
   }

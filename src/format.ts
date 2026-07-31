@@ -55,9 +55,9 @@ export function formatContentsResponse(
     `Requested: ${requestedUrls.length} | Returned: ${response.results.length} | Successful: ${successfulStatuses} | Failed: ${failedStatuses}${response.searchTime === undefined ? "" : ` | Server time: ${response.searchTime}s`}${response.searchId ? ` | Search ID: ${singleLine(response.searchId, 128)}` : ""}`,
   ];
 
-  const returnedUrls = new Set<string>();
+  const returnedKeys = new Set<string>();
   for (const [index, result] of response.results.entries()) {
-    returnedUrls.add(result.url);
+    returnedKeys.add(urlMatchKey(result.url));
     const title = result.metadata?.title || result.url;
     lines.push("", `## ${index + 1}. ${singleLine(title, 512)}`);
     lines.push(`URL: ${truncateUtf8(sanitizeTerminalText(result.url), 4_096)}`);
@@ -68,13 +68,27 @@ export function formatContentsResponse(
     lines.push("--- END UNTRUSTED PAGE CONTENT ---");
   }
 
-  const unavailable = requestedUrls.filter((url) => !returnedUrls.has(url));
+  const unavailable = requestedUrls.filter((url) => !returnedKeys.has(urlMatchKey(url)));
   if (unavailable.length > 0) {
     lines.push("", "## URLs without returned content");
     for (const url of unavailable) lines.push(`- ${truncateUtf8(sanitizeTerminalText(url), 4_096)}`);
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Relaxed URL key for matching requested vs returned URLs.
+ * Ignores protocol and trailing slashes so that redirects
+ * (e.g. http://a.com → https://a.com/) are not reported as unavailable.
+ */
+function urlMatchKey(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.hostname}${parsed.pathname.replace(/\/+$/u, "")}`;
+  } catch {
+    return raw;
+  }
 }
 
 export function truncateUtf8(value: string, maxBytes: number): string {

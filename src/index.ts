@@ -408,6 +408,9 @@ async function validateSummaryModel(
   summaryModel: string | undefined,
 ): Promise<void> {
   if (!summaryModel) return;
+  if (!summaryModel.includes("/")) {
+    throw new Error(`Invalid summary model reference (expected "provider/model"): ${summaryModel}`);
+  }
   const slash = summaryModel.indexOf("/");
   const model = ctx.modelRegistry.find(
     summaryModel.slice(0, slash),

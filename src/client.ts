@@ -302,11 +302,11 @@ function normalizeContentsResponse(
     throw new QueritApiError("Querit contents response is missing results or statuses.", { searchId });
   }
 
-  const results: QueritContentResult[] = [];
+  const deduplicated = new Map<string, QueritContentResult>();
   for (const rawResult of payload.results) {
     if (!isRecord(rawResult)) continue;
     const url = normalizeHttpUrl(rawResult.url);
-    if (!url) continue;
+    if (!url || deduplicated.has(url)) continue;
 
     const rawMetadata = isRecord(rawResult.extrasMeta) ? rawResult.extrasMeta : undefined;
     const metadata = rawMetadata
@@ -319,7 +319,7 @@ function normalizeContentsResponse(
         }
       : undefined;
 
-    results.push({
+    deduplicated.set(url, {
       id: optionalString(rawResult.id),
       url,
       content: optionalString(rawResult.content) ?? "",
@@ -338,7 +338,7 @@ function normalizeContentsResponse(
     errorCode: optionalString(payload.error_code),
     errorMessage: optionalString(payload.error_msg),
     searchId,
-    results,
+    results: [...deduplicated.values()],
     statuses,
     searchTime: optionalNumber(payload.searchTime),
   };

@@ -1,16 +1,28 @@
 # pi-querit-search
 
 English | [中文](./README-zh.md)
-A focused [Pi](https://github.com/earendil-works/pi) extension that adds Querit's live web search and page-content APIs as LLM-callable tools.
+A focused [Pi](https://github.com/earendil-works/pi) extension that gives your agent live web search and page fetching through [Querit](https://www.querit.ai).
 
-- `web_search` uses `POST https://api.querit.ai/v1/search`
-- `fetch_content` uses `POST https://api.querit.ai/v1/contents`
-- `/querit-setup` configures the API key, default workflow, and a fixed Pi model for optional summaries
-- No multi-provider routing, browser automation, scraping fallback, or direct access to Pi's `auth.json`
+## What is Querit?
+
+Querit is a retrieval system built specifically for generative LLM invocation scenarios. LLMs are limited by their training data and local knowledge bases, which leads to hallucinations and stale answers for complex or real-time queries. Querit delivers real-time, authoritative, and high-quality web search results that integrate directly into LLM applications:
+
+- **Comprehensive content** — a massive global index spanning nearly 20 countries and 10 languages with hundreds of billions of web pages.
+- **Strong capabilities** — flexible retrieval options (time range, region, language, and domain filters) so results can be tuned for specific scenarios.
+- **Excellent results** — accurate, authoritative, high-quality content coverage.
+
+Sign up on [Querit.ai](https://www.querit.ai) to get an API key with 1,000 free API calls per month — no credit card required.
+
+## What this extension does
+
+- `web_search` — live web search with cited results, optionally pre-summarized by a fixed Pi model.
+- `fetch_content` — full page content (markdown, text, or HTML) for up to 10 URLs per call.
+- `/querit-setup` — interactive configuration of the API key, persistent search defaults, the default workflow, and a fixed Pi model for optional summaries.
+- No multi-provider routing, browser automation, scraping fallback, or direct access to Pi's `auth.json`.
 
 ## Install
 
-After the package is published:
+Install from npm:
 
 ```bash
 pi install npm:pi-querit-search
@@ -32,13 +44,20 @@ Start Pi interactively and run:
 /querit-setup
 ```
 
-The command:
+When no configuration exists yet, the command:
 
 1. opens a masked API-key prompt;
 2. makes one one-result search request to validate the key;
-3. lets you choose `raw` or `summary` as the default workflow;
-4. lists Pi's current scoped/available models, with the active model first, and saves one fixed summary model;
-5. stores the configuration in Pi's agent directory as `querit-search.json`.
+3. walks through persistent search defaults (result count, time range, content excerpts, chunks per result, countries, languages, included/excluded domains) — each step can be skipped;
+4. lets you choose `raw` or `summary` as the default workflow;
+5. lists Pi's current scoped/available models, with the active model first, and saves one fixed summary model;
+6. stores the configuration in Pi's agent directory as `querit-search.json`.
+
+When a key is already configured, the command opens a menu instead:
+
+- **Replace API key (full re-setup)** — prompts for a new key, validates it, and re-runs the full flow. The old key is overwritten locally; revoke it in the Querit dashboard if needed.
+- **Change search defaults** — edits the persistent search filters without touching the saved key.
+- **Change summary settings** — edits the default workflow and the fixed summary model.
 
 The default path is `~/.pi/agent/querit-search.json`. Pi's configured agent directory is respected, including `PI_CODING_AGENT_DIR`. The file contains:
 
@@ -46,7 +65,17 @@ The default path is `~/.pi/agent/querit-search.json`. Pi's configured agent dire
 {
   "apiKey": "your-api-key",
   "defaultWorkflow": "raw",
-  "summaryModel": "provider/model-id"
+  "summaryModel": "provider/model-id",
+  "search": {
+    "count": 5,
+    "timeRange": "m3",
+    "includeContent": false,
+    "chunksPerDoc": 1,
+    "countries": ["united states"],
+    "languages": ["english"],
+    "includeDomains": ["github.com"],
+    "excludeDomains": ["pinterest.com"]
+  }
 }
 ```
 
@@ -64,13 +93,10 @@ Required:
 
 Optional:
 
-- `count` (`1..20`, default `5`)
-- `include_domains`, `exclude_domains`
-- `time_range` (`d7`, `w2`, `m3`, `y1`, or a date range)
-- `countries`, `languages`
-- `include_content`
-- `chunks_per_doc` (`1..3`; plan limits apply)
+- `count` (`1..20`) — overrides the configured default for one call (API default: `5`)
 - `workflow`: `raw` or `summary`; overrides the setup default for one call
+
+Domains, time range, countries, languages, content excerpts, and chunks per result are persistent defaults configured in `/querit-setup` (stored under `search` in `querit-search.json`), not per-call parameters.
 
 Results include explicit title, URL, snippet, source metadata, and optional sentence excerpts. Duplicate and non-HTTP(S) result URLs are removed.
 

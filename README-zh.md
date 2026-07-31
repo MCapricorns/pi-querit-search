@@ -2,16 +2,28 @@
 
 [English](./README.md) | 中文
 
-一个专注的 [Pi](https://github.com/earendil-works/pi) 扩展，将 Querit 的实时网页搜索和页面内容 API 注册为 LLM 可调用的工具。
+一个专注的 [Pi](https://github.com/earendil-works/pi) 扩展，通过 [Querit](https://www.querit.ai) 为智能体提供实时网页搜索和页面抓取能力。
 
-- `web_search` 调用 `POST https://api.querit.ai/v1/search`
-- `fetch_content` 调用 `POST https://api.querit.ai/v1/contents`
-- `/querit-setup` 交互式配置 API Key、默认工作流和固定 Summary 模型
-- 无多供应商路由、无浏览器自动化、无爬虫回退、不读取 Pi 的 `auth.json`
+## Querit 是什么？
+
+Querit 是专为生成式 LLM 调用场景设计的检索系统。LLM 受限于训练数据和本地知识库，在处理复杂或实时查询时容易产生幻觉和时效性问题。Querit 提供实时、权威、准确、高质量的网页搜索结果，无缝集成到 LLM 应用中：
+
+- **内容全面** —— 覆盖近 20 个国家、10 种语言，索引数千亿网页的全球海量索引。
+- **能力强大** —— 灵活的检索选项（时间范围、地区、语言、域名过滤），可按场景定制结果。
+- **效果出色** —— 准确、权威、高质量的内容覆盖。
+
+在 [Querit.ai](https://www.querit.ai) 注册即可获取 API Key，每月 1,000 次免费调用，无需信用卡。
+
+## 扩展功能
+
+- `web_search` —— 实时网页搜索，返回带引用的结果，可选由固定 Pi 模型预先摘要。
+- `fetch_content` —— 抓取最多 10 个 URL 的完整页面内容（markdown、text 或 HTML）。
+- `/querit-setup` —— 交互式配置 API Key、持久化搜索默认值、默认工作流和固定 Summary 模型。
+- 无多供应商路由、无浏览器自动化、无爬虫回退、不读取 Pi 的 `auth.json`。
 
 ## 安装
 
-发布后：
+从 npm 安装：
 
 ```bash
 pi install npm:pi-querit-search
@@ -33,13 +45,20 @@ pi -e .
 /querit-setup
 ```
 
-该命令会：
+没有配置文件时，该命令会：
 
 1. 打开遮罩 API Key 输入框（不记录到聊天历史）；
 2. 发起一次单结果搜索请求验证 Key 有效性；
-3. 让你选择默认工作流：`raw`（原始结果）或 `summary`（自动摘要）；
-4. 列出 Pi 当前 scoped/available 模型（活动模型排第一），选择一个固定 Summary 模型；
-5. 将配置保存到 Pi agent 目录下的 `querit-search.json`。
+3. 逐项询问持久化搜索默认值（结果数量、时间范围、内容摘录、每结果 chunk 数、国家、语言、包含/排除域名），每一项都可跳过；
+4. 让你选择默认工作流：`raw`（原始结果）或 `summary`（自动摘要）；
+5. 列出 Pi 当前 scoped/available 模型（活动模型排第一），选择一个固定 Summary 模型；
+6. 将配置保存到 Pi agent 目录下的 `querit-search.json`。
+
+已有 Key 时，该命令改为打开二级菜单：
+
+- **Replace API key (full re-setup)** —— 输入并验证新 Key，重走完整流程。旧 Key 仅在本地被覆盖，如需吊销请到 Querit 控制台操作。
+- **Change search defaults** —— 只修改持久化搜索过滤项，不动已保存的 Key。
+- **Change summary settings** —— 修改默认工作流和固定 Summary 模型。
 
 默认路径为 `~/.pi/agent/querit-search.json`，尊重 `PI_CODING_AGENT_DIR` 环境变量。文件内容：
 
@@ -47,7 +66,17 @@ pi -e .
 {
   "apiKey": "your-api-key",
   "defaultWorkflow": "raw",
-  "summaryModel": "provider/model-id"
+  "summaryModel": "provider/model-id",
+  "search": {
+    "count": 5,
+    "timeRange": "m3",
+    "includeContent": false,
+    "chunksPerDoc": 1,
+    "countries": ["united states"],
+    "languages": ["english"],
+    "includeDomains": ["github.com"],
+    "excludeDomains": ["pinterest.com"]
+  }
 }
 ```
 
@@ -65,14 +94,10 @@ CI 或临时使用可设置环境变量 `QUERIT_API_KEY`，JSON 配置优先。
 
 可选：
 
-- `count`（`1..20`，默认 `5`）
-- `include_domains`、`exclude_domains`
-- `time_range`（`d7`、`w2`、`m3`、`y1` 或日期范围）
-- `countries`、`languages`
-- `include_content`
-- `chunks_per_doc`（`1..3`，受套餐限制）
+- `count`（`1..20`）—— 单次覆盖已配置的默认值（API 默认 `5`）
 - `workflow`：`raw` 或 `summary`，单次覆盖默认值
 
+域名、时间范围、国家、语言、内容摘录和每结果 chunk 数是持久化默认值，在 `/querit-setup` 中配置（保存于 `querit-search.json` 的 `search` 字段），不再是单次调用参数。
 结果包含标题、URL、摘要、来源元数据和可选的句子级内容摘录。重复和非 HTTP(S) 的结果 URL 会被过滤。
 
 `raw` 是推荐默认值：Pi 外层模型直接接收带引用的 Querit 结果并正常回答。`summary` 会额外调用一次 `/querit-setup` 中选定的固定 Pi 模型，先压缩为简洁摘要再附加确定性 Sources 列表。嵌套调用的 usage 会报告在工具结果上，计入 Pi 会话 token/cost 统计（不影响主上下文窗口核算）。若固定模型缺失、无认证、30 秒超时或返回空内容，`web_search` 自动回退到原始结果并注明原因。用户取消仍会取消整个工具调用。

@@ -51,6 +51,57 @@ describe("Querit configuration", () => {
     await expect(loadQueritConfig(path)).resolves.toEqual({ apiKey: "key" });
   });
 
+  it("persists and sanitizes search defaults", async () => {
+    const path = await temporaryConfigPath();
+    await saveQueritConfig("test-key", path, {
+      search: {
+        count: 10,
+        timeRange: "d7",
+        includeContent: false,
+        chunksPerDoc: 2,
+        countries: ["united states"],
+        languages: ["english"],
+        includeDomains: ["GitHub.com"],
+        excludeDomains: [],
+      },
+    });
+
+    await expect(loadQueritConfig(path)).resolves.toEqual({
+      apiKey: "test-key",
+      search: {
+        count: 10,
+        timeRange: "d7",
+        includeContent: false,
+        chunksPerDoc: 2,
+        countries: ["united states"],
+        languages: ["english"],
+        includeDomains: ["github.com"],
+      },
+    });
+
+    await saveQueritConfig("test-key", path, { search: { count: 99 } });
+    await expect(loadQueritConfig(path)).resolves.toEqual({ apiKey: "test-key" });
+  });
+
+  it("drops invalid search default fields when loading", async () => {
+    const path = await temporaryConfigPath();
+    await writeFile(path, JSON.stringify({
+      apiKey: "key",
+      search: {
+        count: 99,
+        chunksPerDoc: 0,
+        timeRange: "  ",
+        countries: ["atlantis"],
+        languages: "english",
+        includeDomains: ["ok.example", "bad domain", 42],
+      },
+    }), "utf8");
+
+    await expect(loadQueritConfig(path)).resolves.toEqual({
+      apiKey: "key",
+      search: { includeDomains: ["ok.example"] },
+    });
+  });
   it("prefers JSON configuration over the environment fallback", async () => {
     const path = await temporaryConfigPath();
     await saveQueritConfig("json-key", path);

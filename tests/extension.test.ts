@@ -77,35 +77,44 @@ describe("Pi extension", () => {
     expect([...harness.commands.keys()]).toEqual(["querit-setup"]);
   });
 
-  it("maps web_search parameters to the Querit request", async () => {
-    const harness = await createHarness();
+  it("merges configured search defaults into the Querit request", async () => {
+    const harness = await createHarness({
+      configSettings: {
+        search: {
+          count: 10,
+          timeRange: "m3",
+          includeContent: true,
+          chunksPerDoc: 1,
+          countries: ["united states"],
+          languages: ["english"],
+          includeDomains: ["example.com"],
+          excludeDomains: ["spam.example"],
+        },
+      },
+    });
     const tool = harness.tools.get("web_search")!;
-    const result = await tool.execute("call", {
-      query: " pi ",
-      count: 3,
-      include_domains: ["example.com"],
-      exclude_domains: ["spam.example"],
-      time_range: "d7",
-      countries: ["united states"],
-      languages: ["english"],
-      include_content: true,
-      chunks_per_doc: 1,
-    }, undefined, vi.fn(), {});
+    const result = await tool.execute("call", { query: " pi " }, undefined, vi.fn(), {});
 
     expect(harness.search).toHaveBeenCalledWith({
       query: "pi",
-      count: 3,
+      count: 10,
       chunksPerDoc: 1,
       needContent: true,
       filters: {
         sites: { include: ["example.com"], exclude: ["spam.example"] },
-        timeRange: { date: "d7" },
+        timeRange: { date: "m3" },
         geo: { countries: { include: ["united states"] } },
         languages: { include: ["english"] },
       },
     }, undefined);
     expect(result.content[0].text).toContain("https://example.com/");
     expect(result.details.sources).toEqual([{ title: "Example", url: "https://example.com/" }]);
+
+    await tool.execute("call", { query: "pi", count: 3 }, undefined, vi.fn(), {});
+    expect(harness.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: "pi", count: 3 }),
+      undefined,
+    );
   });
 
   it("uses the fixed setup model for optional summaries and accounts for usage", async () => {
@@ -194,9 +203,7 @@ describe("Pi extension", () => {
     const notify = vi.fn();
     const setStatus = vi.fn();
     const currentModel = { provider: "anthropic", id: "summary-model" };
-    const select = vi.fn()
-      .mockResolvedValueOnce("Raw results (recommended)")
-      .mockResolvedValueOnce("anthropic/summary-model");
+    const select = vi.fn().mockImplementation(async (_message: string, options: string[]) => options[0]);
     const ctx = {
       mode: "tui",
       model: currentModel,
@@ -207,7 +214,7 @@ describe("Pi extension", () => {
         getApiKeyAndHeaders: vi.fn(async () => ({ ok: true, apiKey: "model-key" })),
       },
       ui: {
-        custom: vi.fn().mockResolvedValue("new-test-key"),
+        custom: vi.fn().mockResolvedValueOnce("new-test-key").mockResolvedValue(""),
         select,
         notify,
         setStatus,
@@ -222,8 +229,135 @@ describe("Pi extension", () => {
       defaultWorkflow: "raw",
       summaryModel: "anthropic/summary-model",
     });
-    expect(select).toHaveBeenNthCalledWith(2, "Fixed model for optional Querit summaries", ["anthropic/summary-model"]);
+    const modelPrompt = select.mock.calls.find(([message]) => String(message).includes("Fixed model"));
+    expect(modelPrompt?.[1]).toEqual(["anthropic/summary-model"]);
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("configured successfully"), "info");
     expect(setStatus).toHaveBeenLastCalledWith("querit-setup", undefined);
+  });
+
+  it("shows a secondary menu and updates search defaults while keeping the saved key", async () => {
+    const harness = await createHarness({
+      configSettings: { defaultWorkflow: "summary", summaryModel: "anthropic/summary-model" },
+    });
+    const command = harness.commands.get("querit-setup")!;
+    const notify = vi.fn();
+    const select = vi.fn()
+      .mockResolvedValueOnce("Change search defaults")
+      .mockResolvedValueOnce("10")
+      .mockResolvedValueOnce("d7 (past 7 days)")
+      .mockResolvedValueOnce("Skip (use API default)")
+      .mockResolvedValueOnce("Skip (use API default)");
+    const custom = vi.fn()
+      .mockResolvedValueOnce("United States, Japan")
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce("github.com")
+      .mockResolvedValueOnce("none");
+    const ctx = { mode: "tui", ui: { select, custom, notify, setStatus: vi.fn() } };
+
+    await command.handler("", ctx);
+
+    expect(select.mock.calls[0][0]).toContain("…-key");
+    expect(JSON.parse(await readFile(harness.configPath, "utf8"))).toEqual({
+      apiKey: "test-key",
+      defaultWorkflow: "summary",
+      summaryModel: "anthropic/summary-model",
+      search: {
+        count: 10,
+        timeRange: "d7",
+        countries: ["united states", "japan"],
+        includeDomains: ["github.com"],
+      },
+    });
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("search defaults updated"), "info");
+    expect(harness.search).not.toHaveBeenCalled();
+  });
+
+  it("updates summary settings from the menu and preserves search defaults", async () => {
+    const harness = await createHarness({
+      configSettings: { defaultWorkflow: "raw", search: { count: 7 } },
+    });
+    const command = harness.commands.get("querit-setup")!;
+    const notify = vi.fn();
+    const currentModel = { provider: "anthropic", id: "summary-model" };
+    const select = vi.fn()
+      .mockResolvedValueOnce("Change summary settings")
+      .mockResolvedValueOnce("Auto-summary before returning results")
+      .mockResolvedValueOnce("anthropic/summary-model");
+    const ctx = {
+      mode: "tui",
+      model: currentModel,
+      scopedModels: [{ model: currentModel }],
+      modelRegistry: {
+        getAvailable: vi.fn(() => []),
+        find: vi.fn(() => currentModel),
+        getApiKeyAndHeaders: vi.fn(async () => ({ ok: true, apiKey: "model-key" })),
+      },
+      ui: { select, custom: vi.fn(), notify, setStatus: vi.fn() },
+    };
+
+    await command.handler("", ctx);
+
+    expect(JSON.parse(await readFile(harness.configPath, "utf8"))).toEqual({
+      apiKey: "test-key",
+      defaultWorkflow: "summary",
+      summaryModel: "anthropic/summary-model",
+      search: { count: 7 },
+    });
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("summary settings updated"), "info");
+  });
+
+  it("replaces the API key through the full re-setup flow", async () => {
+    const harness = await createHarness();
+    const command = harness.commands.get("querit-setup")!;
+    const notify = vi.fn();
+    const currentModel = { provider: "anthropic", id: "summary-model" };
+    const select = vi.fn()
+      .mockResolvedValueOnce("Replace API key (full re-setup)")
+      .mockImplementation(async (_message: string, options: string[]) => options[0]);
+    const ctx = {
+      mode: "tui",
+      model: currentModel,
+      scopedModels: [{ model: currentModel }],
+      modelRegistry: {
+        getAvailable: vi.fn(() => []),
+        find: vi.fn(() => currentModel),
+        getApiKeyAndHeaders: vi.fn(async () => ({ ok: true, apiKey: "model-key" })),
+      },
+      ui: {
+        custom: vi.fn().mockResolvedValueOnce("replacement-key").mockResolvedValue(""),
+        select,
+        notify,
+        setStatus: vi.fn(),
+      },
+    };
+
+    await command.handler("", ctx);
+
+    expect(harness.search).toHaveBeenCalledWith({ query: "Querit API connectivity test", count: 1 });
+    const saved = JSON.parse(await readFile(harness.configPath, "utf8"));
+    expect(saved.apiKey).toBe("replacement-key");
+    expect(saved.defaultWorkflow).toBe("raw");
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("configured successfully"), "info");
+  });
+
+  it("leaves the configuration untouched when the menu is dismissed", async () => {
+    const harness = await createHarness({
+      configSettings: { defaultWorkflow: "summary", summaryModel: "anthropic/summary-model" },
+    });
+    const command = harness.commands.get("querit-setup")!;
+    const notify = vi.fn();
+    const ctx = {
+      mode: "tui",
+      ui: { select: vi.fn().mockResolvedValue(undefined), custom: vi.fn(), notify, setStatus: vi.fn() },
+    };
+
+    await command.handler("", ctx);
+
+    expect(JSON.parse(await readFile(harness.configPath, "utf8"))).toEqual({
+      apiKey: "test-key",
+      defaultWorkflow: "summary",
+      summaryModel: "anthropic/summary-model",
+    });
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("cancelled"), "info");
   });
 });

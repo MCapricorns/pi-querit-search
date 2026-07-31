@@ -360,4 +360,27 @@ describe("Pi extension", () => {
     });
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("cancelled"), "info");
   });
+
+  it("keeps legacy configs (no search field) fully open without forcing prompts", async () => {
+    const harness = await createHarness({
+      configSettings: { defaultWorkflow: "summary", summaryModel: "anthropic/summary-model" },
+    });
+
+    const tool = harness.tools.get("web_search")!;
+    await tool.execute("call", { query: "pi" }, undefined, vi.fn(), {});
+    expect(harness.search).toHaveBeenCalledWith({ query: "pi", count: 5 }, undefined);
+
+    const command = harness.commands.get("querit-setup")!;
+    const notify = vi.fn();
+    const select = vi.fn().mockResolvedValue(undefined);
+    const ctx = { mode: "tui", ui: { select, custom: vi.fn(), notify, setStatus: vi.fn() } };
+    await command.handler("", ctx);
+
+    expect(select.mock.calls[0][0]).toContain("already configured");
+    expect(JSON.parse(await readFile(harness.configPath, "utf8"))).toEqual({
+      apiKey: "test-key",
+      defaultWorkflow: "summary",
+      summaryModel: "anthropic/summary-model",
+    });
+  });
 });
